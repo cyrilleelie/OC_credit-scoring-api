@@ -14,7 +14,7 @@ env/
 .idea/
 
 # Fichiers de données et artefacts (à adapter)
-#*.csv
+*.csv
 #*.json
 #model_artifacts/
 
