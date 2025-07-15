@@ -1,0 +1,27 @@
+# Fichiers de cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environnements virtuels
+.venv
+venv/
+env/
+
+# Fichiers des IDE
+.vscode/
+.idea/
+
+# Fichiers de données et artefacts (à adapter)
+#*.csv
+#*.json
+#model_artifacts/
+
+# Fichiers de build et de distribution
+dist/
+build/
+*.egg-info/
+
+# Caches Poetry
+.pypoetry.cfg
