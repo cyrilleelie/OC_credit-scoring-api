@@ -31,8 +31,10 @@ jobs:
         run: pip install poetry
 
       # Étape 3: Installer les dépendances
+      # --- CORRECTION APPLIQUÉE ICI ---
+      # On ajoute --no-root pour n'installer que les dépendances, pas le projet lui-même.
       - name: Install dependencies
-        run: poetry install
+        run: poetry install --no-root
 
       # Étape 4: Lancer les tests avec pytest
       - name: Run tests
