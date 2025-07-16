@@ -1,0 +1,62 @@
+# Nom du workflow qui apparaîtra dans l'onglet "Actions" de GitHub
+name: CI/CD - Test et Build de l'API Scoring
+
+# Déclencheurs du workflow
+on:
+  # Se déclenche à chaque push sur la branche develop
+  push:
+    branches: [ develop ]
+  # Se déclenche aussi à chaque Pull Request vers la branche develop
+  pull_request:
+    branches: [ develop ]
+
+# Liste des jobs à exécuter
+jobs:
+  # Premier job : lancer les tests
+  test:
+    # Le type de machine sur lequel le job va s'exécuter
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Étape 1: Récupérer le code de votre dépôt
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Étape 2: Mettre en place Python et Poetry
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      - name: Install Poetry
+        run: pip install poetry
+
+      # Étape 3: Installer les dépendances
+      # --- CORRECTION APPLIQUÉE ICI ---
+      # On ajoute --no-root pour n'installer que les dépendances, pas le projet lui-même.
+      - name: Install dependencies
+        run: poetry install --no-root
+
+      # Étape 4: Lancer les tests avec pytest
+      - name: Run tests
+        run: poetry run pytest
+
+  # Deuxième job : construire l'image Docker
+  build_docker:
+    # Ce job ne se lancera que si le job 'test' a réussi
+    needs: test
+    runs-on: ubuntu-latest
+    
+    # Ce job ne se lancera QUE sur un push vers 'develop', pas sur les Pull Requests
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+
+    steps:
+      # Étape 1: Récupérer le code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Étape 2: Construire l'image Docker
+      # Cette étape ne pousse pas l'image, elle la construit seulement pour vérifier que le Dockerfile est correct.
+      # Le déploiement sur un registre (Docker Hub, GHCR) sera une étape ultérieure.
+      - name: Build Docker image
+        run: docker build -t scoring-api:${{ github.sha }} .
+
