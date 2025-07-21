@@ -1,0 +1,21 @@
+services:
+  # Définition du service de base de données PostgreSQL
+  db:
+    image: postgres:13
+    container_name: credit_scoring_db
+    restart: always
+    environment:
+      # Définition des identifiants. Dans un vrai projet, utilisez un fichier .env
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: credit_scoring
+    volumes:
+      # Persiste les données de la base de données sur la machine hôte
+      # pour ne pas les perdre si le conteneur est recréé.
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Mappe le port 5432 du conteneur au port 5432 de votre machine
+      - "5432:5432"
+
+volumes:
+  postgres_data:
