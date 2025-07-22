@@ -1,40 +1,25 @@
 # src/init_db.py
 
 import pandas as pd
-import numpy as np # Import de numpy pour gérer les infinis
+import numpy as np
 from sqlalchemy import create_engine, text
 from sqlalchemy.dialects.postgresql import JSONB
 import time
 import os
-import json
 import traceback
 
-# --- Configuration de la base de données ---
-DB_USER = "user"
-DB_PASSWORD = "password"
-DB_HOST = "localhost"
-DB_PORT = "5432"
-DB_NAME = "credit_scoring"
-
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
-# --- Chemins vers les fichiers de données ---
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.path.join(BASE_DIR, '..', 'data')
-TRAIN_DATA_FILE = os.path.join(DATA_PATH, 'application_train_rdy.csv')
-TEST_DATA_FILE = os.path.join(DATA_PATH, 'application_test_rdy.csv')
-
+# Importer la configuration centralisée
+from config import settings
 
 def create_db_engine():
-    """Crée et retourne un moteur de connexion SQLAlchemy."""
-    return create_engine(DATABASE_URL)
+    """Crée et retourne un moteur de connexion SQLAlchemy en utilisant la config."""
+    return create_engine(settings.database_url)
 
 def create_tables(engine):
     """Crée les tables si elles n'existent pas déjà."""
     with engine.connect() as connection:
         print("Création des tables...")
         
-        # On supprime les anciennes tables pour garantir un état propre
         connection.execute(text("DROP TABLE IF EXISTS training_data CASCADE;"))
         connection.execute(text("DROP TABLE IF EXISTS test_data CASCADE;"))
         connection.execute(text("DROP TABLE IF EXISTS api_logs CASCADE;"))
@@ -68,8 +53,6 @@ def create_tables(engine):
                 http_status_code INT
             );
         """))
-
-        # --- NOUVELLE TABLE POUR LES RAPPORTS ---
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS drift_reports (
                 id SERIAL PRIMARY KEY,
@@ -79,7 +62,6 @@ def create_tables(engine):
         """))
         connection.commit()
         print("Tables créées avec succès.")
-
 
 def load_data_to_db(engine, file_path, table_name):
     """Charge les données d'un CSV dans la base de données par morceaux (chunks) pour optimiser la mémoire."""
@@ -118,7 +100,6 @@ def load_data_to_db(engine, file_path, table_name):
     
     print(f"Chargement de {total_rows} lignes dans {table_name} terminé.")
 
-
 if __name__ == "__main__":
     engine = None
     try:
@@ -139,8 +120,8 @@ if __name__ == "__main__":
             exit()
 
         create_tables(engine)
-        load_data_to_db(engine, TRAIN_DATA_FILE, 'training_data')
-        load_data_to_db(engine, TEST_DATA_FILE, 'test_data')
+        load_data_to_db(engine, settings.train_data_file, 'training_data')
+        load_data_to_db(engine, settings.test_data_file, 'test_data')
 
     except Exception:
         error_trace = traceback.format_exc()

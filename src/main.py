@@ -2,91 +2,76 @@
 
 import pandas as pd
 import joblib
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import create_engine, text
-import os
-import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
+import json
 import warnings
 
-# Ignorer les warnings de scikit-learn pour une sortie plus propre
+# Importer les modules locaux
+from src import security
+from config import settings
+
 warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
 
-# --- Configuration et chargement des ressources ---
+# --- Chargement des ressources ---
+model = joblib.load(settings.model_artifacts_path)
+engine = create_engine(settings.database_url)
 
-# 1. Configuration de la base de données
-DB_USER = "user"
-DB_PASSWORD = "password"
-DB_HOST = "localhost"
-DB_PORT = "5432"
-DB_NAME = "credit_scoring"
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
-# 2. Chargement du modèle
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, '..', 'model_artifacts', 'credit_scoring_model.joblib')
-try:
-    model = joblib.load(MODEL_PATH)
-    print("Modèle chargé avec succès.")
-except Exception as e:
-    print(f"Erreur critique lors du chargement du modèle : {e}")
-    model = None
-
-# 3. Connexion à la base de données
-try:
-    engine = create_engine(DATABASE_URL)
-    print("Connexion à la base de données établie.")
-except Exception as e:
-    print(f"Erreur critique de connexion à la base de données : {e}")
-    engine = None
-
-# 4. Initialisation de l'API FastAPI
 app = FastAPI(
     title="API de Scoring Crédit",
-    description="API pour prédire la probabilité de défaut de paiement à partir d'un ID client.",
-    version="2.0.0"
+    description="API sécurisée pour prédire la probabilité de défaut de paiement.",
+    version="2.2.0"
 )
 
-# --- Endpoints de l'API ---
+# --- Endpoints ---
 
 @app.get("/")
 def read_root():
-    """Endpoint racine qui retourne un message de bienvenue."""
-    return {"message": "Bienvenue sur l'API de Scoring Crédit v2."}
+    return {"message": "Bienvenue sur l'API de Scoring Crédit v2.2."}
+
+@app.post("/auth")
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    """Endpoint pour s'authentifier et recevoir un token JWT."""
+    user = security.get_user(form_data.username)
+    if not user or not security.verify_password(form_data.password, user["hashed_password"]):
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    access_token = security.create_access_token(
+        data={"sub": user["username"]}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
 
 @app.post("/predict/{client_id}")
-def predict(client_id: int):
-    """
-    Prédit le score pour un client donné à partir de son ID.
-    """
-    if model is None or engine is None:
-        raise HTTPException(status_code=503, detail="Service non disponible: Modèle ou base de données non initialisé.")
-
+def predict(client_id: int, current_user: dict = Depends(security.get_current_active_user)):
+    """Prédit le score pour un client. Endpoint protégé."""
     start_time = time.time()
     request_timestamp = datetime.now()
 
+    with engine.connect() as connection:
+        query = text("SELECT data FROM test_data WHERE sk_id_curr = :client_id")
+        result = connection.execute(query, {"client_id": client_id}).fetchone()
+    
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Client ID {client_id} non trouvé.")
+    
+    client_data_json = result[0]
+    
     try:
-        # 1. Récupérer les données du client depuis la BDD
-        with engine.connect() as connection:
-            query = text("SELECT data FROM test_data WHERE sk_id_curr = :client_id")
-            result = connection.execute(query, {"client_id": client_id}).fetchone()
-        
-        if not result:
-            raise HTTPException(status_code=404, detail=f"Client ID {client_id} non trouvé.")
-            
-        client_data_json = result[0]
-        
-        # 2. Préparer les données pour le modèle
         features_df = pd.DataFrame([client_data_json])
         model_features = model.named_steps['imputer'].feature_names_in_
         features_df = features_df.reindex(columns=model_features)
         
-        # 3. Faire la prédiction
         prediction_proba = model.predict_proba(features_df)[:, 1]
         score = prediction_proba[0]
         
-        # 4. Préparer et enregistrer le log
         decision = bool(score > 0.5)
         end_time = time.time()
         inference_time_ms = (end_time - start_time) * 1000
@@ -107,7 +92,6 @@ def predict(client_id: int):
             connection.execute(query, log_entry)
             connection.commit()
 
-        # 5. Retourner le résultat
         return {
             "client_id": client_id,
             "prediction_probability": float(score),
@@ -116,7 +100,5 @@ def predict(client_id: int):
         }
 
     except Exception as e:
-        # Log de l'erreur interne
         print(f"Erreur interne du serveur pour le client {client_id}: {e}")
         raise HTTPException(status_code=500, detail="Erreur interne du serveur lors de la prédiction.")
-
