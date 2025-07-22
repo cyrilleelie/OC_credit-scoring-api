@@ -2,103 +2,121 @@
 
 import pandas as pd
 import joblib
-from fastapi import FastAPI
-from pydantic import BaseModel, ConfigDict # Import de ConfigDict
-import uvicorn
+from fastapi import FastAPI, HTTPException
+from sqlalchemy import create_engine, text
 import os
+import json
+from datetime import datetime
+import time
+import warnings
 
-# 1. Initialisation de l'API FastAPI
-app = FastAPI(
-    title="API de Scoring Crédit",
-    description="Une API pour prédire la probabilité de défaut de paiement d'un client.",
-    version="1.0.0"
-)
+# Ignorer les warnings de scikit-learn pour une sortie plus propre
+warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
 
-# 2. Définition du modèle de données d'entrée (Syntaxe Pydantic V2)
-class ClientFeatures(BaseModel):
-    # Utilisation de ConfigDict pour la configuration
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "EXT_SOURCE_2": 0.262949,
-                "EXT_SOURCE_3": 0.139376,
-                "DAYS_BIRTH": -20775,
-                "DAYS_EMPLOYED": -1676.0,
-                "PAYMENT_RATE": 0.057470,
-                "AMT_ANNUITY": 24700.5,
-                "AMT_CREDIT": 406597.5,
-                "DAYS_ID_PUBLISH": -2120
-            }
-        }
-    )
-    
-    EXT_SOURCE_2: float = 0.262949
-    EXT_SOURCE_3: float = 0.139376
-    DAYS_BIRTH: int = -20775
-    DAYS_EMPLOYED: float = -1676.0
-    PAYMENT_RATE: float = 0.057470
-    AMT_ANNUITY: float = 24700.5
-    AMT_CREDIT: float = 406597.5
-    DAYS_ID_PUBLISH: int = -2120
+# --- Configuration et chargement des ressources ---
 
-# 3. Chargement du modèle
-MODEL_PATH = os.path.join(os.path.dirname(__file__), '..', 'model_artifacts', 'credit_scoring_model.joblib')
+# 1. Configuration de la base de données
+DB_USER = "user"
+DB_PASSWORD = "password"
+DB_HOST = "localhost"
+DB_PORT = "5432"
+DB_NAME = "credit_scoring"
+DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+# 2. Chargement du modèle
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, '..', 'model_artifacts', 'credit_scoring_model.joblib')
 try:
     model = joblib.load(MODEL_PATH)
     print("Modèle chargé avec succès.")
-except FileNotFoundError:
-    print(f"Erreur: Le fichier du modèle n'a pas été trouvé à l'emplacement {MODEL_PATH}")
-    model = None
 except Exception as e:
-    print(f"Une erreur est survenue lors du chargement du modèle : {e}")
+    print(f"Erreur critique lors du chargement du modèle : {e}")
     model = None
 
+# 3. Connexion à la base de données
+try:
+    engine = create_engine(DATABASE_URL)
+    print("Connexion à la base de données établie.")
+except Exception as e:
+    print(f"Erreur critique de connexion à la base de données : {e}")
+    engine = None
 
-# 4. Définition des endpoints de l'API
+# 4. Initialisation de l'API FastAPI
+app = FastAPI(
+    title="API de Scoring Crédit",
+    description="API pour prédire la probabilité de défaut de paiement à partir d'un ID client.",
+    version="2.0.0"
+)
+
+# --- Endpoints de l'API ---
 
 @app.get("/")
 def read_root():
     """Endpoint racine qui retourne un message de bienvenue."""
-    return {"message": "Bienvenue sur l'API de Scoring Crédit. Utilisez l'endpoint /predict pour obtenir des prédictions."}
+    return {"message": "Bienvenue sur l'API de Scoring Crédit v2."}
 
-@app.post("/predict")
-def predict(client_features: ClientFeatures):
+@app.post("/predict/{client_id}")
+def predict(client_id: int):
     """
-    Endpoint de prédiction.
-    Reçoit les caractéristiques d'un client et retourne la probabilité de défaut de paiement.
+    Prédit le score pour un client donné à partir de son ID.
     """
-    if model is None:
-        return {"error": "Modèle non chargé. Impossible de faire une prédiction."}
+    if model is None or engine is None:
+        raise HTTPException(status_code=503, detail="Service non disponible: Modèle ou base de données non initialisé.")
 
-    # Conversion des données d'entrée en DataFrame pandas (avec model_dump)
-    features_df = pd.DataFrame([client_features.model_dump()])
-    
+    start_time = time.time()
+    request_timestamp = datetime.now()
+
     try:
+        # 1. Récupérer les données du client depuis la BDD
+        with engine.connect() as connection:
+            query = text("SELECT data FROM test_data WHERE sk_id_curr = :client_id")
+            result = connection.execute(query, {"client_id": client_id}).fetchone()
+        
+        if not result:
+            raise HTTPException(status_code=404, detail=f"Client ID {client_id} non trouvé.")
+            
+        client_data_json = result[0]
+        
+        # 2. Préparer les données pour le modèle
+        features_df = pd.DataFrame([client_data_json])
         model_features = model.named_steps['imputer'].feature_names_in_
-    except AttributeError:
-        return {"error": "Impossible de récupérer les noms des features du modèle."}
-
-    data_for_prediction = pd.DataFrame(0, index=[0], columns=model_features)
-
-    for col in features_df.columns:
-        if col in data_for_prediction.columns:
-            data_for_prediction[col] = features_df[col].values
-        else:
-            print(f"Attention : La colonne '{col}' fournie n'est pas utilisée par le modèle.")
-
-    try:
-        prediction_proba = model.predict_proba(data_for_prediction)[:, 1]
+        features_df = features_df.reindex(columns=model_features)
+        
+        # 3. Faire la prédiction
+        prediction_proba = model.predict_proba(features_df)[:, 1]
         score = prediction_proba[0]
+        
+        # 4. Préparer et enregistrer le log
+        decision = bool(score > 0.5)
+        end_time = time.time()
+        inference_time_ms = (end_time - start_time) * 1000
+        response_timestamp = datetime.now()
+
+        log_entry = {
+            "request_timestamp": request_timestamp, "client_id": client_id,
+            "input_data": json.dumps(client_data_json), "prediction_proba": float(score),
+            "prediction_decision": decision, "response_timestamp": response_timestamp,
+            "inference_time_ms": inference_time_ms, "http_status_code": 200
+        }
+        
+        with engine.connect() as connection:
+            query = text("""
+                INSERT INTO api_logs (request_timestamp, client_id, input_data, prediction_proba, prediction_decision, response_timestamp, inference_time_ms, http_status_code)
+                VALUES (:request_timestamp, :client_id, :input_data, :prediction_proba, :prediction_decision, :response_timestamp, :inference_time_ms, :http_status_code);
+            """)
+            connection.execute(query, log_entry)
+            connection.commit()
+
+        # 5. Retourner le résultat
+        return {
+            "client_id": client_id,
+            "prediction_probability": float(score),
+            "prediction_decision": "Défaut de paiement probable" if decision else "Remboursement probable",
+            "threshold": 0.5
+        }
+
     except Exception as e:
-        return {"error": f"Erreur lors de la prédiction : {e}"}
+        # Log de l'erreur interne
+        print(f"Erreur interne du serveur pour le client {client_id}: {e}")
+        raise HTTPException(status_code=500, detail="Erreur interne du serveur lors de la prédiction.")
 
-    is_default = bool(score > 0.5) 
-    
-    return {
-        "prediction_probability": score,
-        "prediction_decision": "Défaut de paiement probable" if is_default else "Remboursement probable",
-        "threshold": 0.5
-    }
-
-if __name__ == '__main__':
-    uvicorn.run(app, host="0.0.0.0", port=8000)
