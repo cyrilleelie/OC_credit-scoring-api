@@ -25,3 +25,6 @@ build/
 
 # Caches Poetry
 .pypoetry.cfg
+
+# Fichier checklist de développement
+CHECKLIST.md

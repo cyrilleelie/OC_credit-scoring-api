@@ -1,6 +1,7 @@
 # src/init_db.py
 
 import pandas as pd
+import numpy as np # Import de numpy pour gérer les infinis
 from sqlalchemy import create_engine, text
 from sqlalchemy.dialects.postgresql import JSONB
 import time
@@ -20,8 +21,8 @@ DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NA
 # --- Chemins vers les fichiers de données ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE_DIR, '..', 'data')
-# --- MODIFICATION: On pointe vers le fichier de données déjà traité ---
-PROCESSED_TEST_DATA_FILE = os.path.join(DATA_PATH, 'application_test_rdy.csv')
+TRAIN_DATA_FILE = os.path.join(DATA_PATH, 'application_train_rdy.csv')
+TEST_DATA_FILE = os.path.join(DATA_PATH, 'application_test_rdy.csv')
 
 
 def create_db_engine():
@@ -34,10 +35,19 @@ def create_tables(engine):
         print("Création des tables...")
         
         # On supprime les anciennes tables pour garantir un état propre
+        connection.execute(text("DROP TABLE IF EXISTS training_data CASCADE;"))
         connection.execute(text("DROP TABLE IF EXISTS test_data CASCADE;"))
         connection.execute(text("DROP TABLE IF EXISTS api_logs CASCADE;"))
+        connection.execute(text("DROP TABLE IF EXISTS drift_reports CASCADE;"))
 
-        # Table pour les données de test (feature store)
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS training_data (
+                sk_id_curr INT PRIMARY KEY,
+                target INT,
+                data JSONB
+            );
+        """))
+
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS test_data (
                 sk_id_curr INT PRIMARY KEY,
@@ -45,7 +55,6 @@ def create_tables(engine):
             );
         """))
 
-        # Table pour les logs de l'API
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS api_logs (
                 id SERIAL PRIMARY KEY,
@@ -59,6 +68,15 @@ def create_tables(engine):
                 http_status_code INT
             );
         """))
+
+        # --- NOUVELLE TABLE POUR LES RAPPORTS ---
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS drift_reports (
+                id SERIAL PRIMARY KEY,
+                report_timestamp TIMESTAMP WITH TIME ZONE,
+                report_html TEXT
+            );
+        """))
         connection.commit()
         print("Tables créées avec succès.")
 
@@ -70,19 +88,23 @@ def load_data_to_db(engine, file_path, table_name):
     chunk_size = 10000
     total_rows = 0
     for chunk in pd.read_csv(file_path, chunksize=chunk_size):
-        # Les noms de colonnes peuvent contenir des caractères non supportés, on les nettoie
-        chunk.columns = ["".join (c if c.isalnum() else '_' for c in str(x)) for x in chunk.columns]
+        chunk.replace([np.inf, -np.inf], np.nan, inplace=True)
 
         df_to_load = pd.DataFrame()
         df_to_load['sk_id_curr'] = chunk['SK_ID_CURR']
         
-        # On enlève les colonnes inutiles ou redondantes avant de créer le JSON
-        cols_to_drop = [col for col in ['SK_ID_CURR', 'TARGET', 'Unnamed_0'] if col in chunk.columns]
-        data_cols = chunk.drop(columns=cols_to_drop)
+        cols_to_drop = ['SK_ID_CURR', 'Unnamed: 0']
+        
+        if table_name == 'training_data' and 'TARGET' in chunk.columns:
+            df_to_load['target'] = chunk['TARGET']
+            cols_to_drop.append('TARGET')
+
+        data_cols = chunk.drop(columns=[col for col in cols_to_drop if col in chunk.columns])
         
         data_cols = data_cols.astype(object).where(pd.notna(data_cols), None)
+        
         df_to_load['data'] = data_cols.to_dict(orient='records')
-
+        
         df_to_load.to_sql(
             table_name, 
             engine, 
@@ -108,25 +130,22 @@ if __name__ == "__main__":
                     print("Connexion à la base de données réussie.")
                     break
             except Exception:
-                print(f"Échec de la connexion à la base de données. Nouvel essai dans 5 secondes...")
+                print(f"Échec de la connexion. Nouvel essai dans 5 secondes...")
                 retries -= 1
                 time.sleep(5)
         
         if not engine or retries == 0:
-            print("Impossible de se connecter à la base de données après plusieurs tentatives.")
+            print("Impossible de se connecter à la base de données.")
             exit()
 
         create_tables(engine)
-        load_data_to_db(engine, PROCESSED_TEST_DATA_FILE, 'test_data')
+        load_data_to_db(engine, TRAIN_DATA_FILE, 'training_data')
+        load_data_to_db(engine, TEST_DATA_FILE, 'test_data')
 
-    except FileNotFoundError:
-        print(f"\nERREUR: Le fichier de données traitées '{os.path.basename(PROCESSED_TEST_DATA_FILE)}' est introuvable.")
-        print("Veuillez vous assurer d'avoir exécuté le script de feature engineering au préalable.")
     except Exception:
         error_trace = traceback.format_exc()
         error_log_path = 'db_load_error.log'
         with open(error_log_path, 'w', encoding='utf-8') as f:
             f.write(error_trace)
         print(f"\nUNE ERREUR CRITIQUE EST SURVENUE.")
-        print(f"Le détail complet a été sauvegardé dans le fichier : {error_log_path}")
-
+        print(f"Le détail a été sauvegardé dans : {error_log_path}")
