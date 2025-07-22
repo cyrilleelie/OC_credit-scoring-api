@@ -28,3 +28,6 @@ build/
 
 # Fichier checklist de développement
 CHECKLIST.md
+
+# Ignorer le fichier d'environnement
+.env

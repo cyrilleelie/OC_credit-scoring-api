@@ -1,80 +1,81 @@
 # src/tests/test_api.py
 
 from fastapi.testclient import TestClient
-import sys
-import os
-import pytest # Importer pytest
+import pytest
 
-# Ajouter le répertoire src au path pour que l'import fonctionne
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# pytest-cov et pytest sont nécessaires, assurez-vous qu'ils sont dans pyproject.toml (dev-dependencies)
+# poetry add pytest pytest-cov --group dev
 
 from main import app
 
-# Créer un client de test pour notre application FastAPI
+# Crée un client de test pour notre application FastAPI
 client = TestClient(app)
+
+# --- Fixture Pytest pour gérer l'authentification ---
+
+@pytest.fixture(scope="module")
+def auth_headers():
+    """
+    Fixture qui s'authentifie une fois pour tous les tests du module
+    et retourne les en-têtes d'autorisation nécessaires.
+    """
+    response = client.post(
+        "/auth",
+        data={"username": "user_test", "password": "pass123"}
+    )
+    assert response.status_code == 200
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+# --- Tests ---
 
 def test_read_root():
     """
     Teste l'endpoint racine ('/').
-    Il doit retourner un status code 200 et un message de bienvenue.
+    Il doit retourner un code de statut 200 et le message de bienvenue.
     """
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"message": "Bienvenue sur l'API de Scoring Crédit. Utilisez l'endpoint /predict pour obtenir des prédictions."}
+    assert response.json() == {"message": "Bienvenue sur l'API de Scoring Crédit v2.2."}
 
+def test_predict_unauthorized():
+    """
+    Teste que l'endpoint de prédiction est bien protégé.
+    Un appel sans token doit retourner une erreur 401.
+    """
+    response = client.post("/predict/100001")
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Not authenticated"
 
-# --- CORRECTION APPLIQUÉE ICI ---
-# On utilise un marqueur pytest pour dire au test d'ignorer ce warning spécifique.
 @pytest.mark.filterwarnings("ignore:X does not have valid feature names, but LGBMClassifier was fitted with feature names")
-def test_predict_success():
+def test_predict_success(auth_headers):
     """
-    Teste l'endpoint de prédiction ('/predict') avec des données valides.
-    Il doit retourner un status code 200 et une prédiction valide.
+    Teste l'endpoint de prédiction avec un ID client valide et une authentification correcte.
+    Il doit retourner un code de statut 200 et une prédiction valide.
     """
-    # Données d'exemple pour un client
-    client_data = {
-        "EXT_SOURCE_2": 0.262949,
-        "EXT_SOURCE_3": 0.139376,
-        "DAYS_BIRTH": -20775,
-        "DAYS_EMPLOYED": -1676.0,
-        "PAYMENT_RATE": 0.057470,
-        "AMT_ANNUITY": 24700.5,
-        "AMT_CREDIT": 406597.5,
-        "DAYS_ID_PUBLISH": -2120
-    }
+    valid_client_id = 100001
     
-    response = client.post("/predict", json=client_data)
+    response = client.post(f"/predict/{valid_client_id}", headers=auth_headers)
     
-    # Vérifier le status code
     assert response.status_code == 200
     
-    # Vérifier le contenu de la réponse
     data = response.json()
+    assert data["client_id"] == valid_client_id
     assert "prediction_probability" in data
     assert "prediction_decision" in data
-    assert "threshold" in data
-    
-    # Vérifier que la probabilité est un flottant entre 0 et 1
     assert isinstance(data["prediction_probability"], float)
     assert 0.0 <= data["prediction_probability"] <= 1.0
 
-def test_predict_invalid_data():
+def test_predict_client_not_found(auth_headers):
     """
-    Teste l'endpoint de prédiction avec des données invalides (un type incorrect).
-    FastAPI doit automatiquement retourner un status code 422 (Unprocessable Entity).
+    Teste l'endpoint de prédiction avec un ID client qui n'existe pas, en étant authentifié.
+    L'API doit retourner une erreur HTTP 404.
     """
-    invalid_client_data = {
-        "EXT_SOURCE_2": "ceci n'est pas un float", # Donnée invalide
-        "EXT_SOURCE_3": 0.139376,
-        "DAYS_BIRTH": -20775,
-        "DAYS_EMPLOYED": -1676.0,
-        "PAYMENT_RATE": 0.057470,
-        "AMT_ANNUITY": 24700.5,
-        "AMT_CREDIT": 406597.5,
-        "DAYS_ID_PUBLISH": -2120
-    }
+    invalid_client_id = 9999999
     
-    response = client.post("/predict", json=invalid_client_data)
+    response = client.post(f"/predict/{invalid_client_id}", headers=auth_headers)
     
-    # FastAPI gère la validation et doit retourner une erreur 422
-    assert response.status_code == 422
+    assert response.status_code == 404
+    assert response.json()["detail"] == f"Client ID {invalid_client_id} non trouvé."
+
