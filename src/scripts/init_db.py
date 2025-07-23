@@ -6,10 +6,10 @@ import argparse
 import os
 import traceback
 
-from src.database import engine, SessionLocal
-from src import models
+from src.database.database import engine, SessionLocal
+from src.database import models
 from src.config import settings
-from src.security import get_password_hash
+from src.api.security import get_password_hash
 
 def init_db(train_file_path, test_file_path):
     """
