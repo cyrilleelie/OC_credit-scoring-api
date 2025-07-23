@@ -68,15 +68,20 @@ def generate_and_save_drift_report():
             reference_data['TARGET'] = reference_df_db['target']
             current_data = pd.DataFrame([row[0] for row in current_data_logs.itertuples(index=False)])
             
-            common_columns = list(set(reference_data.columns) & set(current_data.columns))
-            reference_data = reference_data[common_columns]
+            if 'TARGET' in reference_data.columns:
+                reference_data_for_drift = reference_data.drop(columns=['TARGET'])
+            else:
+                reference_data_for_drift = reference_data
+            
+            common_columns = list(set(reference_data_for_drift.columns) & set(current_data.columns))
+            reference_data_for_drift = reference_data_for_drift[common_columns]
             current_data = current_data[common_columns]
             
-            reference_data.replace([np.inf, -np.inf], np.nan, inplace=True)
+            reference_data_for_drift.replace([np.inf, -np.inf], np.nan, inplace=True)
             current_data.replace([np.inf, -np.inf], np.nan, inplace=True)
 
             data_drift_report = Report(metrics=[DataDriftPreset()])
-            data_drift_report_run = data_drift_report.run(reference_data=reference_data, current_data=current_data)
+            data_drift_report_run = data_drift_report.run(reference_data=reference_data_for_drift, current_data=current_data)
             
             # Créer un fichier temporaire, fermer le descripteur, puis lire
             fd, tmp_path = tempfile.mkstemp(suffix='.html')
