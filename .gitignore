@@ -14,7 +14,7 @@ env/
 .idea/
 
 # Fichiers de données et artefacts (à adapter)
-*.csv
+data/
 #*.json
 #model_artifacts/
 
@@ -25,3 +25,9 @@ build/
 
 # Caches Poetry
 .pypoetry.cfg
+
+# Fichier checklist de développement
+CHECKLIST.md
+
+# Ignorer le fichier d'environnement
+.env
