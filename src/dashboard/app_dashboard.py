@@ -107,20 +107,26 @@ def generate_and_save_drift_report():
 # --- Fonctions d'Authentification ---
 
 def login(username, password):
-    """Appelle l'API pour obtenir un token JWT."""
+    """Appelle l'API pour obtenir un token JWT et affiche des informations de débogage."""
     try:
         response = requests.post(
             f"{settings.api_url}/auth",
             data={"username": username, "password": password}
         )
+
         if response.status_code == 200:
             st.session_state['token'] = response.json()['access_token']
             st.success("Connexion réussie !")
             st.rerun()
         else:
-            st.error("Nom d'utilisateur ou mot de passe incorrect.")
+            # On affiche une erreur plus détaillée dans l'interface
+            error_detail = response.json().get('detail', 'Erreur inconnue.')
+            st.error(f"Échec de l'authentification : {error_detail}")
+
     except requests.exceptions.ConnectionError:
         st.error("Impossible de se connecter à l'API. Assurez-vous qu'elle est en cours d'exécution.")
+    except Exception as e:
+        st.error(f"Une erreur inattendue est survenue : {e}")
 
 def logout():
     """Déconnecte l'utilisateur en supprimant le token de la session."""
@@ -222,7 +228,7 @@ else:
                         st.line_chart(filtered_logs.set_index('request_timestamp')['inference_time_ms'])
                         
                         st.subheader("Détail des appels sur la période")
-                        st.dataframe(filtered_logs, height=400)
+                        st.dataframe(filtered_logs, use_container_width=True)
                     else:
                         st.info("Aucune donnée disponible pour la période sélectionnée.")
                 else:
