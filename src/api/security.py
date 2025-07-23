@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 # On importe les modèles et la configuration
 from ..database import models, schemas
-from ..config import *
+from ..config import settings
 
 # Configuration du hachage des mots de passe
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
