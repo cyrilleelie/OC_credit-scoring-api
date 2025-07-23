@@ -4,7 +4,7 @@ from sqlalchemy import (
     Boolean, Column, Integer, String, DateTime, 
     JSON, Float, Text
 )
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 
 # Base est la classe mère dont tous vos modèles de table hériteront.
 # SQLAlchemy l'utilise pour mapper vos classes Python aux tables de la BDD.

@@ -37,7 +37,7 @@ def test_read_root():
     """
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"message": "Bienvenue sur l'API de Scoring Crédit v2.2."}
+    assert response.json() == {"message": "Bienvenue sur l'API de Scoring Crédit"}
 
 def test_predict_unauthorized():
     """
