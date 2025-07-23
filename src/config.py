@@ -1,7 +1,12 @@
 # src/config.py
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional
 import os
+from dotenv import load_dotenv
+
+# Charge les variables depuis un fichier .env (qui n'est pas versionné dans Git)
+load_dotenv()
 
 class Settings(BaseSettings):
     # --- Variables chargées depuis le fichier .env ---
@@ -13,13 +18,16 @@ class Settings(BaseSettings):
     db_name: str
     
     # Sécurité JWT
+    api_url: str
+    api_user: Optional[str] = None
+    api_password: Optional[str] = None
     secret_key: str
     algorithm: str
     access_token_expire_minutes: int
-
-    # --- Variables définies directement ici ---
-    # URL de l'API pour le dashboard
-    api_url: str = "http://127.0.0.1:8000"
+    decision_threshold: float
+    
+    # Autres variables
+    model_path: str
     
     # Chemins (construits à partir de la racine du projet)
     base_dir: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
