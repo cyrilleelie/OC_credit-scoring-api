@@ -3,9 +3,9 @@
 import pandas as pd
 import numpy as np
 from sqlalchemy.dialects.postgresql import JSONB
-import time
 import traceback
 import os
+import argparse
 
 # On importe les objets et fonctions depuis nos fichiers centralisés
 from ..database.database import engine, SessionLocal
@@ -13,7 +13,7 @@ from ..database import models
 from ..config import settings
 from ..api.security import get_password_hash
 
-def init_db():
+def init_db(train_file_path, test_file_path):
     """
     Crée toutes les tables définies dans models.py et charge les données initiales.
     """
@@ -28,25 +28,25 @@ def init_db():
     db = SessionLocal()
     try:
         # --- Création de l'utilisateur de test ---
-        db_user = db.query(models.User).filter(models.User.username == config.api_user).first()
+        db_user = db.query(models.User).filter(models.User.username == settings.api_user).first()
         if not db_user:
-            hashed_password = get_password_hash(config.api_password)
+            hashed_password = get_password_hash(settings.api_password)
             new_user = models.User(
-                username=config.api_user,
+                username=settings.api_user,
                 email="test@example.com",
                 hashed_password=hashed_password
             )
             db.add(new_user)
             db.commit()
-            print(f"Utilisateur de test '{config.api_user}' créé.")
+            print(f"Utilisateur de test '{settings.api_user}' créé.")
         else:
             print("Utilisateur de test déjà existant.")
 
         # --- Chargement des données d'entraînement ---
         if db.query(models.TrainingData).first() is None:
-            print(f"Chargement du fichier {os.path.basename(config.train_data_file)}...")
+            print(f"Chargement du fichier {os.path.basename(train_file_path)}...")
             chunk_size = 10000
-            for chunk in pd.read_csv(config.train_data_file, chunksize=chunk_size):
+            for chunk in pd.read_csv(train_file_path, chunksize=chunk_size):
                 chunk.replace([np.inf, -np.inf], np.nan, inplace=True)
                 data_to_load = chunk.to_dict(orient='records')
                 db.bulk_insert_mappings(models.TrainingData, data_to_load)
@@ -57,9 +57,9 @@ def init_db():
 
         # --- Chargement des données de test ---
         if db.query(models.TestData).first() is None:
-            print(f"Chargement du fichier {os.path.basename(config.test_data_file)}...")
+            print(f"Chargement du fichier {os.path.basename(test_file_path)}...")
             chunk_size = 10000
-            for chunk in pd.read_csv(config.test_data_file, chunksize=chunk_size):
+            for chunk in pd.read_csv(test_file_path, chunksize=chunk_size):
                 chunk.replace([np.inf, -np.inf], np.nan, inplace=True)
                 # Renommer SK_ID_CURR pour correspondre au modèle
                 chunk.rename(columns={'SK_ID_CURR': 'sk_id_curr'}, inplace=True)
@@ -74,9 +74,15 @@ def init_db():
         db.close()
 
 if __name__ == "__main__":
+    # On ajoute la gestion des arguments de la ligne de commande
+    parser = argparse.ArgumentParser(description="Initialize the database.")
+    parser.add_argument("--train-file", default=settings.train_data_file, help="Path to the training data CSV.")
+    parser.add_argument("--test-file", default=settings.test_data_file, help="Path to the test data CSV.")
+    args = parser.parse_args()
+    
     print("Initialisation de la base de données...")
     try:
-        init_db()
+        init_db(args.train_file, args.test_file)
         print("Initialisation terminée avec succès.")
     except Exception as e:
         print(f"\nUNE ERREUR CRITIQUE EST SURVENUE.")

@@ -56,7 +56,31 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-root
 
-      # Étape 4: Lancer les tests avec pytest
+      # Étape 4: Initialiser la base de données
+      - name: Initialize Database
+        env:
+          # On fournit au script les mêmes identifiants que ceux du service
+          DB_HOST: ${{ vars.DB_HOST }}
+          DB_PORT: ${{ vars.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ vars.DB_NAME }}
+          # Fournissez des valeurs par défaut pour les autres variables requises
+          # pour que le script puisse démarrer.
+          API_URL: ${{ vars.API_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          ALGORITHM: ${{ vars.ALGORITHM }}
+          ACCESS_TOKEN_EXPIRE_MINUTES: ${{ vars.ACCESS_TOKEN_EXPIRE_MINUTES }}
+          API_USER: ${{ secrets.API_USER }}
+          API_PASSWORD: ${{ secrets.API_PASSWORD }}
+          DECISION_THRESHOLD: ${{ vars.DECISION_THRESHOLD }}
+          MODEL_PATH: ${{ vars.MODEL_PATH }}
+        run: |
+          poetry run python -m src.scripts.init_db \
+            --train-file tests/fixtures/sample_train.csv \
+            --test-file tests/fixtures/sample_test.csv
+
+      # Étape 5: Lancer les tests avec pytest
       - name: Run tests
         env:
           # --- SECRETS ---
