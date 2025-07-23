@@ -6,7 +6,7 @@ import pytest
 # pytest-cov et pytest sont nécessaires, assurez-vous qu'ils sont dans pyproject.toml (dev-dependencies)
 # poetry add pytest pytest-cov --group dev
 
-from ..api.main import app
+from src.api.main import app
 
 # Crée un client de test pour notre application FastAPI
 client = TestClient(app)
