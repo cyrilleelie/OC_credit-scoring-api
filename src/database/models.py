@@ -28,7 +28,7 @@ class ApiLog(Base):
     request_timestamp = Column(DateTime, nullable=False)
     client_id = Column(Integer, nullable=True)
     input_data = Column(JSON, nullable=False)
-    prediction_probability = Column(Float, nullable=False)
+    prediction_proba = Column(Float, nullable=False)
     prediction_decision = Column(String, nullable=False)
     inference_time_ms = Column(Float, nullable=False)
     http_status_code = Column(Integer, nullable=False)
