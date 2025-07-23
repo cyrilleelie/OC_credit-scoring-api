@@ -17,6 +17,26 @@ jobs:
     # Le type de machine sur lequel le job va s'exécuter
     runs-on: ubuntu-latest
     
+    services:
+      # On définit un service nommé 'postgres'
+      postgres:
+        # On utilise une image Docker PostgreSQL officielle et légère
+        image: postgres:13-alpine
+        # On configure le conteneur avec des variables d'environnement
+        env:
+          POSTGRES_USER: ${{ secrets.DB_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          POSTGRES_DB: ${{ vars.DB_NAME }}
+        # On s'assure que le port 5432 du conteneur est accessible sur le localhost du serveur
+        ports:
+          - ${{ vars.DB_PORT }}:5432
+        # Healthcheck : attend que la BDD soit prête avant de lancer les étapes suivantes
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       # Étape 1: Récupérer le code de votre dépôt
       - name: Checkout code
