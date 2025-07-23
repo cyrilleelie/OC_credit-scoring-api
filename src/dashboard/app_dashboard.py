@@ -7,10 +7,11 @@ import requests
 from sqlalchemy import create_engine, text
 import warnings
 import tempfile
+import os
 from datetime import datetime, time
 
 # Importer la configuration centralisée
-from config import settings
+from src.config import settings
 
 from evidently import Report
 from evidently.presets import DataDriftPreset
@@ -99,6 +100,7 @@ def generate_and_save_drift_report():
             st.error(f"Erreur lors de la génération du rapport : {e}")
 
 # --- Fonctions d'Authentification ---
+
 def login(username, password):
     """Appelle l'API pour obtenir un token JWT."""
     try:
@@ -120,8 +122,6 @@ def logout():
     if 'token' in st.session_state:
         del st.session_state['token']
     st.success("Vous avez été déconnecté.")
-    st.rerun()
-
 
 # --- Interface Principale ---
 
@@ -131,8 +131,8 @@ st.set_page_config(layout="wide", page_title="Dashboard de Scoring Crédit")
 if 'token' not in st.session_state:
     st.title("Connexion au Dashboard de Scoring")
     with st.form("login_form"):
-        username = st.text_input("Nom d'utilisateur", value="user_test")
-        password = st.text_input("Mot de passe", type="password", value="pass123")
+        username = st.text_input("Nom d'utilisateur", value=settings.api_user)
+        password = st.text_input("Mot de passe", type="password", value=settings.api_password)
         submitted = st.form_submit_button("Se connecter")
         if submitted:
             login(username, password)
