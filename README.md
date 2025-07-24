@@ -48,7 +48,7 @@ Suivez ces étapes pour lancer l'application en environnement de développement 
 ### 2. Cloner le Dépôt
 
 ```bash
-git clone [https://github.com/cyrilleelie/OC_credit-scoring-api](https://github.com/cyrilleelie/OC_credit-scoring-api)
+git clone https://github.com/cyrilleelie/OC_credit-scoring-api
 cd credit-scoring-api
 ```
 
@@ -149,7 +149,7 @@ Le script `locustfile.py` utilise Locust pour simuler une montée en charge et t
 **Exécution :**
 1.  **Lancez Locust :**
     ```bash
-    poetry run python -m locust -f src/scripts/locustfile.py --host="[http://127.0.0.1:8000](http://127.0.0.1:8000)"
+    poetry run python -m locust -f src/scripts/locustfile.py --host="http://127.0.0.1:8000"
     ```
 2.  **Ouvrez l'interface web de Locust** dans votre navigateur à l'adresse `http://localhost:8089`.
 3.  **Configurez et démarrez un test** en spécifiant le nombre d'utilisateurs et le taux d'apparition.

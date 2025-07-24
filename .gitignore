@@ -31,3 +31,6 @@ CHECKLIST.md
 
 # Ignorer le fichier d'environnement
 .env
+
+# Fichiers de test
+.coverage
