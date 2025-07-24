@@ -30,4 +30,11 @@ build/
 CHECKLIST.md
 
 # Ignorer le fichier d'environnement
+<<<<<<< HEAD
 .env
+=======
+.env
+
+# Fichiers de test
+.coverage
+>>>>>>> feature/deployment

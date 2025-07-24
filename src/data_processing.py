@@ -39,7 +39,7 @@ def application_train_test(num_rows=None, nan_as_category=False):
         
     df, _ = one_hot_encoder(df, nan_as_category)
     
-    df['DAYS_EMPLOYED'].replace(365243, np.nan, inplace=True)
+    df['DAYS_EMPLOYED'].replace(365243, np.nan)
     
     df['DAYS_EMPLOYED_PERC'] = df['DAYS_EMPLOYED'] / df['DAYS_BIRTH']
     df['INCOME_CREDIT_PERC'] = df['AMT_INCOME_TOTAL'] / df['AMT_CREDIT']
