@@ -51,7 +51,7 @@ class TrainingData(Base):
     target = Column(Integer, nullable=False)
 
 # --- Modèle pour stocker les données de test ---
-class TestData(Base):
+class ClientDataForTest(Base):
     __tablename__ = 'test_data'
 
     # On utilise également sk_id_curr comme clé primaire

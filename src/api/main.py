@@ -89,7 +89,7 @@ def predict(
     """
     request_time = datetime.now()
     
-    db_client = db.query(models.TestData).filter(models.TestData.sk_id_curr == client_id).first()
+    db_client = db.query(models.ClientDataForTest).filter(models.ClientDataForTest.sk_id_curr == client_id).first()
     if db_client is None:
         raise HTTPException(status_code=404, detail=f"Client ID {client_id} non trouvé.")
         

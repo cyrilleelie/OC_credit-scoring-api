@@ -53,7 +53,7 @@ def init_db(train_file_path, test_file_path):
             print("Données d'entraînement chargées.")
 
         # --- Chargement des données de test ---
-        if db.query(models.TestData).count() == 0:
+        if db.query(models.ClientDataForTest).count() == 0:
             print(f"Chargement du fichier {os.path.basename(test_file_path)}...")
             chunk_size = 5000
             for chunk in pd.read_csv(test_file_path, chunksize=chunk_size):
@@ -70,7 +70,7 @@ def init_db(train_file_path, test_file_path):
                     }
                     records_to_insert.append(record)
                 
-                db.bulk_insert_mappings(models.TestData, records_to_insert)
+                db.bulk_insert_mappings(models.ClientDataForTest, records_to_insert)
                 db.commit()
             print("Données de test chargées.")
     finally:
