@@ -13,7 +13,7 @@ sys.path.insert(0, PROJECT_ROOT)
 # Imports nécessaires pour la connexion à la BDD
 from src.config import settings
 from src.database.database import SessionLocal
-from src.database.models import TestData
+from src.database.models import ClientDataForTest
 
 # --- Variable globale pour stocker les ID clients ---
 # Cette liste sera partagée par tous les utilisateurs virtuels.
@@ -29,7 +29,7 @@ def on_test_start(environment, **kwargs):
     db = SessionLocal()
     try:
         # Récupère tous les sk_id_curr de la table de test
-        results = db.query(TestData.sk_id_curr).all()
+        results = db.query(ClientDataForTest.sk_id_curr).all()
         # Stocke les ID dans la liste globale
         global CLIENT_IDS
         CLIENT_IDS = [row[0] for row in results]

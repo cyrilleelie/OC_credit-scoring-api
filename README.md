@@ -48,7 +48,7 @@ Suivez ces étapes pour lancer l'application en environnement de développement 
 ### 2. Cloner le Dépôt
 
 ```bash
-git clone [URL_DE_VOTRE_DEPOT]
+git clone [https://github.com/cyrilleelie/OC_credit-scoring-api](https://github.com/cyrilleelie/OC_credit-scoring-api)
 cd credit-scoring-api
 ```
 
@@ -59,7 +59,7 @@ Créez votre fichier de configuration local à partir de l'exemple fourni.
 ```bash
 cp .env.example .env
 ```
-**Action requise :** Ouvrez le fichier `.env` et remplissez les valeurs, notamment les identifiants de la base de données.
+**Action requise :** Ouvrez le fichier `.env` et remplissez les valeurs, notamment les identifiants de la base de données et les chemins vers les fichiers de données si vous les utilisez localement.
 
 ### 4. Installer les Dépendances
 
@@ -79,10 +79,28 @@ docker-compose up -d
 
 ### 6. Initialiser la Base de Données
 
-Exécutez ce script une seule fois pour créer les tables et charger les données initiales.
+Ce script crée le schéma de la base de données et y charge les données des clients.
+
+**Important :** Les fichiers de données CSV complets ne sont pas inclus dans ce dépôt. Vous avez deux options pour exécuter ce script :
+
+**Option A : Développement Local (avec les données complètes)**
+
+1.  Assurez-vous d'avoir téléchargé les fichiers `application_train_rdy.csv` et `application_test_rdy.csv`.
+2.  Vérifiez que les chemins vers ces fichiers sont correctement configurés dans votre fichier `.env` (`TRAIN_DATA_FILE` et `TEST_DATA_FILE`).
+3.  Exécutez la commande sans arguments.
 
 ```bash
 poetry run python -m src.scripts.init_db
+```
+
+**Option B : Utilisation de Données Alternatives (ex: pour les tests)**
+
+Vous pouvez spécifier le chemin vers d'autres fichiers de données (comme les petits fichiers de test `fixtures`) en utilisant des arguments. C'est la méthode utilisée en intégration continue.
+
+```bash
+poetry run python -m src.scripts.init_db \
+  --train-file tests/fixtures/sample.train.csv \
+  --test-file tests/fixtures/sample_test.csv
 ```
 
 ### 7. Lancer l'API FastAPI
@@ -109,3 +127,29 @@ Pour lancer la suite de tests automatisés, exécutez la commande suivante depui
 
 ```bash
 poetry run pytest
+```
+
+## 🔬 Analyse de Performance
+
+Cette section décrit les outils utilisés pour mesurer et analyser la performance de l'API. **Assurez-vous que le serveur de l'API est en cours d'exécution** avant de lancer ces scripts.
+
+### Profiling de l'API (`cProfile`)
+
+Le script `profile_api.py` utilise `cProfile` pour analyser les goulots d'étranglement de l'API. Il effectue plusieurs appels à l'endpoint de prédiction et mesure le temps passé dans chaque fonction.
+
+**Exécution :**
+```bash
+poetry run python -m src.scripts.profile_api
+```
+
+### Test de Charge (`Locust`)
+
+Le script `locustfile.py` utilise Locust pour simuler une montée en charge et tester la robustesse de l'API sous la pression de plusieurs utilisateurs virtuels.
+
+**Exécution :**
+1.  **Lancez Locust :**
+    ```bash
+    poetry run python -m locust -f src/scripts/locustfile.py --host="[http://127.0.0.1:8000](http://127.0.0.1:8000)"
+    ```
+2.  **Ouvrez l'interface web de Locust** dans votre navigateur à l'adresse `http://localhost:8089`.
+3.  **Configurez et démarrez un test** en spécifiant le nombre d'utilisateurs et le taux d'apparition.
