@@ -1,18 +1,19 @@
-# src/main.py
+# src/api/main.py
 
 from jose import JWTError, jwt
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import timedelta, datetime
+import time
 import joblib
 import pandas as pd
 
 # On importe tous les composants nécessaires depuis nos modules locaux
-from ..database import models, schemas
-from . import security
-from ..database.database import get_db
-from ..config import settings
+from src.database import models, schemas
+from src.api import security
+from src.database.database import get_db
+from src.config import settings
 
 # --- Initialisation ---
 app = FastAPI(title="API de Scoring Crédit", version="1.0")
@@ -40,7 +41,7 @@ async def get_current_active_user(
         if username is None:
             raise credentials_exception
         token_data = schemas.TokenData(username=username)
-    except jwt.JWTError:
+    except JWTError:
         raise credentials_exception
     
     user = security.get_user(db, username=token_data.username)
@@ -84,20 +85,51 @@ def predict(
 ):
     """
     Endpoint pour obtenir une prédiction de score pour un client donné.
-    Protégé par authentification.
+    Protégé par authentification et logue chaque appel.
     """
-    db_client = db.query(models.TestData).filter(models.TestData.sk_id_curr == client_id).first()
+    request_time = datetime.now()
+    
+    db_client = db.query(models.ClientDataForTest).filter(models.ClientDataForTest.sk_id_curr == client_id).first()
     if db_client is None:
         raise HTTPException(status_code=404, detail=f"Client ID {client_id} non trouvé.")
         
-    client_data = pd.DataFrame([db_client.data])
+    client_data_dict = db_client.data
+    client_data_df = pd.DataFrame([client_data_dict])
     
     # S'assurer que les colonnes du modèle sont présentes
-    client_data = client_data.reindex(columns=model.feature_names_in_, fill_value=0)
+    client_data_df = client_data_df.reindex(columns=model.feature_names_in_, fill_value=0)
     
-    prediction_proba = model.predict_proba(client_data)[:, 1][0]
+    # --- Début de la mesure du temps d'inférence ---
+    start_time = time.time()
+    
+    # La sortie de predict_proba est un type numpy.float64
+    prediction_proba_numpy = model.predict_proba(client_data_df)[:, 1][0]
+    # On le convertit en float Python standard pour la BDD
+    prediction_proba = float(prediction_proba_numpy)
+    
+    end_time = time.time()
+    # --- Fin de la mesure ---
+    inference_time_ms = (end_time - start_time) * 1000
     
     decision = "Crédit Accordé" if prediction_proba < settings.decision_threshold else "Crédit Refusé"
+    
+    # --- Logique de Logging ---
+    try:
+        log_entry = models.ApiLog(
+            request_timestamp=request_time,
+            client_id=client_id,
+            input_data=client_data_dict,
+            prediction_proba=prediction_proba,
+            prediction_decision=decision,
+            inference_time_ms=inference_time_ms,
+            http_status_code=200
+        )
+        db.add(log_entry)
+        db.commit()
+    except Exception as e:
+        print(f"ERREUR lors de l'enregistrement du log : {e}")
+        db.rollback()
+    # --- Fin de la logique de Logging ---
     
     return {
         "client_id": client_id,

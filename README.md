@@ -1,105 +1,155 @@
-# API de Scoring Crédit pour "Prêt à Dépenser"
+# API de Scoring Crédit & Dashboard de Monitoring
 
-Ce projet a pour objectif de déployer un modèle de Machine Learning de scoring crédit, développé en amont, via une API robuste et conteneurisée. L'API doit permettre d'évaluer en temps réel les nouvelles demandes de crédit en fournissant une probabilité de défaut de paiement.
+Ce projet a pour objectif de déployer un modèle de Machine Learning de scoring crédit via une API robuste (FastAPI) et de fournir un dashboard interactif (Streamlit) pour l'analyse et le monitoring en temps réel. L'ensemble de l'application est conçu pour être conteneurisable avec Docker et est supporté par une base de données PostgreSQL.
 
-Ce projet s'inscrit dans un cycle MLOps complet, incluant la création de l'API, les tests automatisés, le déploiement via une pipeline CI/CD, et le monitoring du modèle en production.
+## 🏛️ Architecture
 
----
+L'application est composée de trois services principaux conçus pour fonctionner ensemble :
 
-## 🚀 Workflow du Projet
+1.  **Base de Données PostgreSQL** : Conteneurisée avec Docker, elle stocke les données des clients, les utilisateurs de l'application, les logs d'API et les rapports de dérive.
+2.  **API FastAPI** : Sert le modèle de scoring. Elle expose des endpoints sécurisés pour l'authentification et la prédiction, et enregistre chaque appel dans la base de données.
+3.  **Dashboard Streamlit** : Fournit une interface utilisateur pour interagir avec l'API, visualiser les performances et analyser la dérive des données.
 
-Le projet se déroule en plusieurs étapes séquentielles :
+## 📂 Structure du Projet
 
-1.  **Préparation des données :** Un script exécute toute l'ingénierie des caractéristiques (feature engineering) à partir des données brutes.
-2.  **Entraînement du modèle :** Un second script utilise les données préparées pour entraîner le modèle de scoring final (un pipeline LightGBM) et le sauvegarde.
-3.  **Exposition via une API :** Le modèle entraîné est chargé par une API (FastAPI/Gradio) pour servir des prédictions.
-4.  **Déploiement et Monitoring :** L'API est conteneurisée avec Docker et déployée via une pipeline CI/CD sur GitHub Actions.
+Le code est organisé en modules fonctionnels pour une meilleure clarté et maintenabilité.
 
----
+```
+credit-scoring-api/
+├── .github/workflows/    # Workflows d'Intégration Continue (CI)
+├── model_artifacts/      # Modèles entraînés (ignoré par Git)
+├── src/                  # Code source de l'application
+│   ├── api/              # Logique de l'API FastAPI
+│   ├── config/           # Configuration de l'application
+│   ├── dashboard/        # Logique du Dashboard Streamlit
+│   ├── database/         # Modèles de données et connexion BDD
+│   └── scripts/          # Scripts utilitaires (init_db, profiling, etc.)
+├── tests/                # Tests automatisés
+│   ├── fixtures/         # Petits jeux de données pour les tests
+│   └── test_api.py
+├── .env.example          # Fichier d'exemple pour la configuration
+├── .gitignore
+├── app.py                # Point d'entrée pour le dashboard Streamlit
+├── docker-compose.yml    # Configuration pour lancer la BDD avec Docker
+└── pyproject.toml        # Dépendances et configuration du projet (Poetry)
+```
 
-## 🛠️ Installation et Configuration
+## 🚀 Installation et Lancement
 
-Suivez ces étapes pour mettre en place l'environnement de développement local.
+Suivez ces étapes pour lancer l'application en environnement de développement local.
 
 ### 1. Prérequis
 
--   [Git](https://git-scm.com/)
--   [Python 3.10+](https://www.python.org/)
--   [Poetry](https://python-poetry.org/) pour la gestion des dépendances.
+* [Git](https://git-scm.com/)
+* [Python 3.11+](https://www.python.org/)
+* [Poetry](https://python-poetry.org/)
+* [Docker](https://www.docker.com/) et Docker Compose
 
 ### 2. Cloner le Dépôt
 
 ```bash
-git clone https://github.com/cyrilleelie/OC_credit-scoring-api.git
-cd OC_credit-scoring-api
+git clone [https://github.com/cyrilleelie/OC_credit-scoring-api](https://github.com/cyrilleelie/OC_credit-scoring-api)
+cd credit-scoring-api
 ```
 
-### 3. Téléchargement des Données
+### 3. Fichier de Configuration
 
-Les données pour ce projet proviennent de la compétition Kaggle **"Home Credit Default Risk"**. Elles ne sont pas incluses dans ce dépôt en raison de leur taille.
+Créez votre fichier de configuration local à partir de l'exemple fourni.
 
-**Action requise :**
--   Créez un dossier `data/` à la racine du projet.
--   Téléchargez les fichiers de données depuis [cette page Kaggle](https://www.kaggle.com/c/home-credit-default-risk/data).
--   Placez les fichiers `.csv` suivants dans le dossier `data/` :
-    -   `application_train.csv`
-    -   `application_test.csv`
-    -   `bureau.csv`
-    -   `bureau_balance.csv`
-    -   `previous_application.csv`
-    -   `POS_CASH_balance.csv`
-    -   `installments_payments.csv`
-    -   `credit_card_balance.csv`
+```bash
+cp .env.example .env
+```
+**Action requise :** Ouvrez le fichier `.env` et remplissez les valeurs, notamment les identifiants de la base de données et les chemins vers les fichiers de données si vous les utilisez localement.
 
 ### 4. Installer les Dépendances
 
-Ce projet utilise Poetry pour gérer ses dépendances. Exécutez la commande suivante pour installer les librairies nécessaires listées dans `pyproject.toml` :
+Ce projet utilise Poetry. Installez toutes les dépendances nécessaires :
 
 ```bash
 poetry install
 ```
 
----
+### 5. Démarrer la Base de Données
 
-## ⚙️ Usage
-
-Une fois l'installation terminée, suivez ces étapes pour générer l'artefact du modèle.
-
-### Étape 1 : Lancer la Préparation des Données
-
-Ce script va traiter les données brutes du dossier `data/` et générer les fichiers `application_train_rdy.csv` et `application_test_rdy.csv`.
+Lancez le conteneur PostgreSQL en arrière-plan avec Docker Compose :
 
 ```bash
-poetry run python src/data_processing.py
+docker-compose up -d
 ```
 
-### Étape 2 : Lancer l'Entraînement du Modèle
+### 6. Initialiser la Base de Données
 
-Ce script utilise `application_train_rdy.csv` pour entraîner le modèle final et le sauvegarde dans `model_artifacts/credit_scoring_model.joblib`.
+Ce script crée le schéma de la base de données et y charge les données des clients.
+
+**Important :** Les fichiers de données CSV complets ne sont pas inclus dans ce dépôt. Vous avez deux options pour exécuter ce script :
+
+**Option A : Développement Local (avec les données complètes)**
+
+1.  Assurez-vous d'avoir téléchargé les fichiers `application_train_rdy.csv` et `application_test_rdy.csv`.
+2.  Vérifiez que les chemins vers ces fichiers sont correctement configurés dans votre fichier `.env` (`TRAIN_DATA_FILE` et `TEST_DATA_FILE`).
+3.  Exécutez la commande sans arguments.
 
 ```bash
-poetry run python src/train.py
+poetry run python -m src.scripts.init_db
 ```
 
-### Étape 3 : Lancer l'API (à venir)
+**Option B : Utilisation de Données Alternatives (ex: pour les tests)**
 
-*Les instructions pour lancer l'API via Docker ou localement seront ajoutées ici lors de l'Étape 2 du projet.*
+Vous pouvez spécifier le chemin vers d'autres fichiers de données (comme les petits fichiers de test `fixtures`) en utilisant des arguments. C'est la méthode utilisée en intégration continue.
 
----
-
-## 📂 Structure du Projet
-
+```bash
+poetry run python -m src.scripts.init_db \
+  --train-file tests/fixtures/sample.train.csv \
+  --test-file tests/fixtures/sample_test.csv
 ```
-.
-├── .github/workflows/  # Fichiers de configuration CI/CD (GitHub Actions)
-├── data/               # Données brutes et traitées (ignoré par Git)
-├── model_artifacts/    # Modèles entraînés et sauvegardés (ignoré par Git)
-├── src/                # Code source du projet
-│   ├── data_processing.py  # Script de feature engineering
-│   ├── train.py            # Script d'entraînement du modèle
-│   ├── main.py             # Point d'entrée de l'API (à créer)
-│   └── tests/              # Tests unitaires et d'intégration (à créer)
-├── .gitignore          # Fichiers et dossiers à ignorer par Git
-├── Dockerfile          # Instructions pour construire l'image Docker (à créer)
-├── pyproject.toml      # Dépendances et configuration du projet (Poetry)
-└── README.md           # Ce fichier
+
+### 7. Lancer l'API FastAPI
+
+Dans un premier terminal :
+
+```bash
+poetry run uvicorn src.api.main:app --reload
+```
+L'API sera accessible à l'adresse `http://127.0.0.1:8000`.
+
+### 8. Lancer le Dashboard Streamlit
+
+Dans un second terminal :
+
+```bash
+poetry run streamlit run app.py
+```
+Le dashboard sera accessible à l'adresse `http://localhost:8501`.
+
+## ✅ Tests
+
+Pour lancer la suite de tests automatisés, exécutez la commande suivante depuis la racine du projet :
+
+```bash
+poetry run pytest
+```
+
+## 🔬 Analyse de Performance
+
+Cette section décrit les outils utilisés pour mesurer et analyser la performance de l'API. **Assurez-vous que le serveur de l'API est en cours d'exécution** avant de lancer ces scripts.
+
+### Profiling de l'API (`cProfile`)
+
+Le script `profile_api.py` utilise `cProfile` pour analyser les goulots d'étranglement de l'API. Il effectue plusieurs appels à l'endpoint de prédiction et mesure le temps passé dans chaque fonction.
+
+**Exécution :**
+```bash
+poetry run python -m src.scripts.profile_api
+```
+
+### Test de Charge (`Locust`)
+
+Le script `locustfile.py` utilise Locust pour simuler une montée en charge et tester la robustesse de l'API sous la pression de plusieurs utilisateurs virtuels.
+
+**Exécution :**
+1.  **Lancez Locust :**
+    ```bash
+    poetry run python -m locust -f src/scripts/locustfile.py --host="[http://127.0.0.1:8000](http://127.0.0.1:8000)"
+    ```
+2.  **Ouvrez l'interface web de Locust** dans votre navigateur à l'adresse `http://localhost:8089`.
+3.  **Configurez et démarrez un test** en spécifiant le nombre d'utilisateurs et le taux d'apparition.

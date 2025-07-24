@@ -56,9 +56,6 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-root
 
-      - name: List project files
-        run: ls -R
-
       # Étape 4: Initialiser la base de données
       - name: Initialize Database
         env:
@@ -83,7 +80,25 @@ jobs:
             --train-file tests/fixtures/sample_train.csv \
             --test-file tests/fixtures/sample_test.csv
 
-      # Étape 5: Lancer les tests avec pytest
+      # Étape 5: Démarrer le serveur API
+      - name: Start API Server
+        env:
+          DB_HOST: ${{ vars.DB_HOST }}
+          DB_PORT: ${{ vars.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ vars.DB_NAME }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          ALGORITHM: ${{ vars.ALGORITHM }}
+          ACCESS_TOKEN_EXPIRE_MINUTES: ${{ vars.ACCESS_TOKEN_EXPIRE_MINUTES }}
+          API_USER: ${{ secrets.API_USER }}
+          API_PASSWORD: ${{ secrets.API_PASSWORD }}
+          DECISION_THRESHOLD: ${{ vars.DECISION_THRESHOLD }}
+          MODEL_PATH: ${{ vars.MODEL_PATH }}
+          API_URL: "http://127.0.0.1:8000" # URL non utilisée par le serveur lui-même
+        run: poetry run uvicorn src.api.main:app --host 0.0.0.0 --port 8000 &
+
+      # Étape 6: Lancer les tests avec pytest
       - name: Run tests
         env:
           # --- SECRETS ---
@@ -102,7 +117,9 @@ jobs:
           ACCESS_TOKEN_EXPIRE_MINUTES: ${{ vars.ACCESS_TOKEN_EXPIRE_MINUTES }}
           DECISION_THRESHOLD: ${{ vars.DECISION_THRESHOLD }}
           MODEL_PATH: ${{ vars.MODEL_PATH }}
-        run: poetry run pytest
+        run: |
+          sleep 10 # Donne le temps au serveur de démarrer
+          poetry run pytest
 
   # Deuxième job : construire l'image Docker
   build_docker:

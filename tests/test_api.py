@@ -1,29 +1,26 @@
-# src/tests/test_api.py
+# tests/test_api.py
 
-from fastapi.testclient import TestClient
 import pytest
+import requests # On utilise la bibliothèque standard pour les requêtes HTTP
 
-# pytest-cov et pytest sont nécessaires, assurez-vous qu'ils sont dans pyproject.toml (dev-dependencies)
-# poetry add pytest pytest-cov --group dev
+# On importe uniquement la configuration pour connaître l'URL de l'API
+from src.config import settings
 
-from src.api.main import app
-
-# Crée un client de test pour notre application FastAPI
-client = TestClient(app)
-
-# --- Fixture Pytest pour gérer l'authentification ---
+# --- Fixtures Pytest ---
 
 @pytest.fixture(scope="module")
 def auth_headers():
     """
-    Fixture qui s'authentifie une fois pour tous les tests du module
-    et retourne les en-têtes d'autorisation nécessaires.
+    Fixture qui s'authentifie en faisant une vraie requête HTTP à l'API
+    et retourne les en-têtes d'autorisation.
     """
-    response = client.post(
-        "/auth",
-        data={"username": "user_test", "password": "pass123"}
+    response = requests.post(
+        f"{settings.api_url}/auth",
+        data={"username": settings.api_user, "password": settings.api_password}
     )
-    assert response.status_code == 200
+    if response.status_code != 200:
+        pytest.fail(f"L'authentification a échoué. Assurez-vous que l'API est démarrée. Status: {response.status_code}, Réponse: {response.text}")
+        
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -33,30 +30,27 @@ def auth_headers():
 def test_read_root():
     """
     Teste l'endpoint racine ('/').
-    Il doit retourner un code de statut 200 et le message de bienvenue.
     """
-    response = client.get("/")
+    response = requests.get(f"{settings.api_url}/")
     assert response.status_code == 200
     assert response.json() == {"message": "Bienvenue sur l'API de Scoring Crédit"}
 
 def test_predict_unauthorized():
     """
     Teste que l'endpoint de prédiction est bien protégé.
-    Un appel sans token doit retourner une erreur 401.
     """
-    response = client.post("/predict/100001")
+    response = requests.post(f"{settings.api_url}/predict/100001")
     assert response.status_code == 401
     assert response.json()["detail"] == "Not authenticated"
 
 @pytest.mark.filterwarnings("ignore:X does not have valid feature names, but LGBMClassifier was fitted with feature names")
-def test_predict_success(auth_headers):
+def test_predict_success(auth_headers: dict):
     """
-    Teste l'endpoint de prédiction avec un ID client valide et une authentification correcte.
-    Il doit retourner un code de statut 200 et une prédiction valide.
+    Teste l'endpoint de prédiction avec un ID client valide.
     """
     valid_client_id = 100001
     
-    response = client.post(f"/predict/{valid_client_id}", headers=auth_headers)
+    response = requests.post(f"{settings.api_url}/predict/{valid_client_id}", headers=auth_headers)
     
     assert response.status_code == 200
     
@@ -67,15 +61,13 @@ def test_predict_success(auth_headers):
     assert isinstance(data["prediction_probability"], float)
     assert 0.0 <= data["prediction_probability"] <= 1.0
 
-def test_predict_client_not_found(auth_headers):
+def test_predict_client_not_found(auth_headers: dict):
     """
-    Teste l'endpoint de prédiction avec un ID client qui n'existe pas, en étant authentifié.
-    L'API doit retourner une erreur HTTP 404.
+    Teste l'endpoint de prédiction avec un ID client qui n'existe pas.
     """
     invalid_client_id = 9999999
     
-    response = client.post(f"/predict/{invalid_client_id}", headers=auth_headers)
+    response = requests.post(f"{settings.api_url}/predict/{invalid_client_id}", headers=auth_headers)
     
     assert response.status_code == 404
     assert response.json()["detail"] == f"Client ID {invalid_client_id} non trouvé."
-
